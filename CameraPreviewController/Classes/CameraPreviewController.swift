@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import AttachLayout
 import GPUImage
 
 public protocol CameraPreviewControllerDelegate: class {
@@ -17,13 +18,13 @@ public protocol CameraPreviewControllerDelegate: class {
 
 open class CameraPreviewController: UIViewController {
     
-    public weak var delegate: CameraPreviewControllerDelegate?
+    open weak var delegate: CameraPreviewControllerDelegate?
     
-    public var cameraPosition: AVCaptureDevicePosition = .front
-    public var capturePreset: String = AVCaptureSessionPresetHigh
+    open var cameraPosition: AVCaptureDevicePosition = .front
+    open var capturePreset: String = AVCaptureSessionPresetHigh
     
-    /** Setting this true invokes cameraPreviewDetectedFaces once at a time. If you need this callback continuosly, consider set this property in a timely manner. */
-    public var isFaceDetectorEnabled: Bool = false {
+    /** Setting this true invokes cameraPreviewDetectedFaces one per faceDetectFrequency frame. Default frequency is 10, if you want to detect face more frequent, set faceDetectFrequency as smaller number. */
+    open var isFaceDetectorEnabled: Bool = false {
         willSet {
             if newValue {
                 if faceDetector == nil {
@@ -33,6 +34,9 @@ open class CameraPreviewController: UIViewController {
             }
         }
     }
+    /** Setting smaller number makes it detect face more frequent. Regards zero as default value 30. */
+    open var faceDetectFrequency: Int = 30
+    open var captureCount: Int64 = 0
     
     fileprivate var camera: GPUImageVideoCamera!
     fileprivate var preview: GPUImageView!
@@ -72,7 +76,7 @@ extension CameraPreviewController {
         if preview == nil {
             preview = GPUImageView()
             
-            if boolean(delegate?.cameraPreviewPreferredFillMode(preview: preview)) {
+            if let prefersFillMode = delegate?.cameraPreviewPreferredFillMode(preview: preview), prefersFillMode {
                 preview.fillMode = kGPUImageFillModePreserveAspectRatioAndFill
             }
             
@@ -86,7 +90,7 @@ extension CameraPreviewController {
             
             delegate?.cameraPreviewNeedsLayout(preview: preview)
             if preview.superview == nil {
-                view.attachSubviewFillingParent(preview)
+                view.attachFilling(preview)
             }
         }
     }
@@ -129,6 +133,7 @@ extension CameraPreviewController {
             camera.removeAudioInputsAndOutputs()
             camera.removeFramebuffer()
         }
+        captureCount = 0
     }
 }
 
@@ -305,20 +310,20 @@ extension CameraPreviewController {
 
 extension CameraPreviewController: GPUImageVideoCameraDelegate {
     open func willOutputSampleBuffer(_ sampleBuffer: CMSampleBuffer!) {
-        if isFaceDetectorEnabled {
-            isFaceDetectorEnabled = false
-            features(from: sampleBuffer, completion: { features, aperture, orientation in
-                guard let features = features else { return }
-                var faceFeatures = [CIFaceFeature]()
-                for feature in features {
-                    if let faceFeature = feature as? CIFaceFeature {
-                        faceFeatures.append(faceFeature)
-                    } else {
-                        print("CIFeature object is not a kind of CIFaceFeature.")
-                    }
+        captureCount += 1
+        guard isFaceDetectorEnabled && captureCount % Int64(faceDetectFrequency) == 0 else { return }
+        
+        features(from: sampleBuffer, completion: { features, aperture, orientation in
+            guard let features = features else { return }
+            var faceFeatures = [CIFaceFeature]()
+            for feature in features {
+                if let faceFeature = feature as? CIFaceFeature {
+                    faceFeatures.append(faceFeature)
+                } else {
+                    print("CIFeature object is not a kind of CIFaceFeature.")
                 }
-                self.delegate?.cameraPreviewDetectedFaces(preview: self.preview, features: faceFeatures, aperture: aperture, orientation: orientation)
-            })
-        }
+            }
+            self.delegate?.cameraPreviewDetectedFaces(preview: self.preview, features: faceFeatures, aperture: aperture, orientation: orientation)
+        })
     }
 }
