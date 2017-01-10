@@ -1,0 +1,11 @@
+use_frameworks!
+
+target 'CameraPreviewController_Example' do
+  pod 'CameraPreviewController', :path => '../'
+
+  target 'CameraPreviewController_Tests' do
+    inherit! :search_paths
+
+    
+  end
+end
