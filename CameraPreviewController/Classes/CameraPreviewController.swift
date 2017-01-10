@@ -90,7 +90,7 @@ extension CameraPreviewController {
             
             delegate?.cameraPreviewNeedsLayout(preview: preview)
             if preview.superview == nil {
-                view.attachFilling(preview)
+                _ = view.attachFilling(preview)
             }
         }
     }
