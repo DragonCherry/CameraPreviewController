@@ -15,7 +15,7 @@ Xcode8, Swift 3
 
 ## Dependency
 
-Sample: TinyLog, GPUImage, SwiftARGB
+Sample: TinyLog, GPUImage, AttachLayout, SwiftARGB
 
 Pods: TinyLog, GPUImage, AttachLayout
 
