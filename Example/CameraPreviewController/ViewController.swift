@@ -25,6 +25,7 @@ class ViewController: CameraPreviewController {
     // Buttons for basic functionalities
     var btnToggleCamera: UIButton!
     var btnToggleFlash: UIButton!
+    var btnTakePhoto: UIButton!
     
     // Buttons for recognization functionalities
     var btnToggleDetectFace: UIButton!
@@ -52,6 +53,7 @@ class ViewController: CameraPreviewController {
         // Buttons for basic functionalities
         btnToggleCamera = UIButton(height: height, title: "Toggle Camera", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedToggleCamera))
         btnToggleFlash = UIButton(height: height, title: "Toggle Flash", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedToggleFlash))
+        btnTakePhoto = UIButton(height: height, title: "Take Photo", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedTakePhoto))
         
         // Buttons for recognization functionalities
         btnToggleDetectFace = UIButton(height: height, title: "Enable Face Detection", textSize: textSize, textColor: textColor, backgroundColor: recognitionColor, target: self, selector: #selector(pressedToggleDetect))
@@ -66,14 +68,16 @@ class ViewController: CameraPreviewController {
         
         _ = view.attach(btnToggleDetectFace, on: .top, of: btnAddFilter, widthMultiplier: 0)
         
-        _ = view.attach(btnToggleCamera, on: .top, of: btnToggleDetectFace, widthMultiplier: 1/2)
-        _ = view.attach(btnToggleFlash, on: .right, of: btnToggleCamera, widthMultiplier: 1/2)
+        _ = view.attach(btnToggleCamera, on: .top, of: btnToggleDetectFace, widthMultiplier: 1/3)
+        _ = view.attach(btnToggleFlash, on: .right, of: btnToggleCamera, widthMultiplier: 1/3)
+        _ = view.attach(btnTakePhoto, on: .right, of: btnToggleFlash, widthMultiplier: 0)
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         btnToggleCamera.showBorder()
         btnToggleFlash.showBorder()
+        btnTakePhoto.showBorder()
         btnToggleDetectFace.showBorder()
         btnAddFilter.showBorder()
         btnClearFilters.showBorder()
@@ -81,6 +85,14 @@ class ViewController: CameraPreviewController {
 }
 
 extension CameraPreviewController {
+    
+    public func pressedTakePhoto(sender: UIButton) {
+        takePhoto({ image in
+            let photoVC = PhotoViewController()
+            photoVC.image = image
+            self.present(photoVC, animated: true, completion: nil)
+        })
+    }
     
     public func pressedToggleCamera(sender: UIButton) {
         flipCamera()
