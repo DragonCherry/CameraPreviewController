@@ -11,32 +11,40 @@ import AttachLayout
 import GPUImage
 
 public protocol CameraPreviewControllerDelegate: class {
+    func cameraPreviewWillOutputSampleBuffer(buffer: CMSampleBuffer, sequence: UInt64)
     func cameraPreviewNeedsLayout(preview: GPUImageView)
     func cameraPreviewPreferredFillMode(preview: GPUImageView) -> Bool
+}
+
+public protocol CameraPreviewControllerFaceDetectionDelegate: class {
     func cameraPreviewDetectedFaces(preview: GPUImageView, features: [CIFeature]?, aperture: CGRect, orientation: UIDeviceOrientation)
+    
 }
 
 open class CameraPreviewController: UIViewController {
     
     open weak var delegate: CameraPreviewControllerDelegate?
+    open weak var faceDetectionDelegate: CameraPreviewControllerFaceDetectionDelegate?
     
     open var cameraPosition: AVCaptureDevicePosition = .front
     open var capturePreset: String = AVCaptureSessionPresetHigh
     
     /** Setting this true invokes cameraPreviewDetectedFaces one per faceDetectFrequency frame. Default frequency is 10, if you want to detect face more frequent, set faceDetectFrequency as smaller number. */
     open var isFaceDetectorEnabled: Bool = false {
-        willSet {
-            if newValue {
+        willSet(isEnabled) {
+            if isEnabled {
                 if faceDetector == nil {
                     let detectorOptions = [CIDetectorAccuracy: CIDetectorAccuracyLow]
                     faceDetector = CIDetector(ofType: CIDetectorTypeFace, context: nil, options: detectorOptions)
                 }
+            } else {
+                removeFaceViews()
             }
         }
     }
     /** Setting smaller number makes it detect face more frequent. Regards zero as default value 30. */
-    open var faceDetectFrequency: Int = 30
-    open var captureCount: Int64 = 0
+    open var faceDetectFrequency: UInt = 30
+    open var captureCount: UInt64 = 0
     
     fileprivate var camera: GPUImageVideoCamera!
     fileprivate var preview: GPUImageView!
@@ -270,7 +278,7 @@ extension CameraPreviewController {
         faceViews.removeAll()
     }
     
-    open func showFaceRects(_ faceFeatures: [CIFaceFeature]?, aperture: CGRect, orientation: UIDeviceOrientation) {
+    open func showFaceRects(_ faceFeatures: [CIFaceFeature]?, aperture: CGRect, orientation: UIDeviceOrientation, viewSource: (() -> UIView?)? = nil) {
         guard let faceFeatures = faceFeatures, faceFeatures.count > 0 else { return }
         
         let previewFrame = preview.frame
@@ -298,20 +306,30 @@ extension CameraPreviewController {
             
             faceFrame = faceFrame.offsetBy(dx: preview.origin.x, dy: preview.origin.y)
             
-            let faceView = UIView(frame: faceFrame)
-            faceView.layer.borderWidth = 1
-            faceView.layer.borderColor = UIColor.red.cgColor
-            preview.addSubview(faceView)
+            var faceView: UIView!
             
+            if let rectView = viewSource?() {
+                faceView = rectView
+                faceView.frame = faceFrame
+            } else {
+                faceView = UIView(frame: faceFrame)
+                faceView.layer.borderWidth = 1
+                faceView.layer.borderColor = UIColor.red.cgColor
+            }
+            preview.addSubview(faceView)
             faceViews.append(faceView)
         }
     }
 }
 
 extension CameraPreviewController: GPUImageVideoCameraDelegate {
+    
     open func willOutputSampleBuffer(_ sampleBuffer: CMSampleBuffer!) {
+        
+        delegate?.cameraPreviewWillOutputSampleBuffer(buffer: sampleBuffer, sequence: captureCount)
         captureCount += 1
-        guard isFaceDetectorEnabled && captureCount % Int64(faceDetectFrequency) == 0 else { return }
+        
+        guard isFaceDetectorEnabled && captureCount % UInt64(faceDetectFrequency) == 0 else { return }
         
         features(from: sampleBuffer, completion: { features, aperture, orientation in
             guard let features = features else { return }
@@ -323,7 +341,7 @@ extension CameraPreviewController: GPUImageVideoCameraDelegate {
                     print("CIFeature object is not a kind of CIFaceFeature.")
                 }
             }
-            self.delegate?.cameraPreviewDetectedFaces(preview: self.preview, features: faceFeatures, aperture: aperture, orientation: orientation)
+            self.faceDetectionDelegate?.cameraPreviewDetectedFaces(preview: self.preview, features: faceFeatures, aperture: aperture, orientation: orientation)
         })
     }
 }
