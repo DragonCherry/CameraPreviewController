@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import TinyLog
 import AttachLayout
 import GPUImage
 
@@ -46,10 +47,12 @@ open class CameraPreviewController: UIViewController {
     open var faceDetectFrequency: UInt = 30
     open var captureCount: UInt64 = 0
     
-    fileprivate var camera: GPUImageVideoCamera!
+    fileprivate var camera: GPUImageStillCamera!
     fileprivate var preview: GPUImageView!
+    /** Default filter for capturing still image, and this is recommeded by BradLarson in https://github.com/BradLarson/GPUImage/issues/1874 */
+    fileprivate var defaultFilter: GPUImageFilter! = GPUImageFilter()
     fileprivate var filters = [GPUImageFilter]()
-    fileprivate var lastFilter: GPUImageFilter? { return filters.last }
+    fileprivate var lastFilter: GPUImageOutput? { return filters.last }
     fileprivate var faceDetector: CIDetector?
     fileprivate var faceViews = [UIView]()
     
@@ -105,7 +108,7 @@ extension CameraPreviewController {
     
     open func initCamera() {
         deinitCamera()
-        camera = GPUImageVideoCamera(sessionPreset: capturePreset, cameraPosition: cameraPosition)
+        camera = GPUImageStillCamera(sessionPreset: capturePreset, cameraPosition: cameraPosition)
         switch cameraPosition {
         case .back:
             camera.outputImageOrientation = .portrait
@@ -113,7 +116,8 @@ extension CameraPreviewController {
             camera.outputImageOrientation = .portrait
         }
         camera.delegate = self
-        camera.addTarget(preview)
+        camera.addTarget(defaultFilter)
+        defaultFilter.addTarget(preview)
     }
     
     open func flipCamera() {
@@ -123,9 +127,8 @@ extension CameraPreviewController {
         default:
             cameraPosition = .back
         }
+        camera.rotateCamera()
         initPreview()
-        initCamera()
-        startCapture()
     }
     
     open func pauseCapture() {
@@ -183,6 +186,71 @@ extension CameraPreviewController {
             return camera.inputCamera.torchMode
         }
     }
+    
+    open func image(from sampleBuffer: CMSampleBuffer) -> UIImage? {
+        
+        // Get a CMSampleBuffer's Core Video image buffer for the media data
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            loge("Failed to get image buffer from CMSampleBuffer object.")
+            return nil
+        }
+        
+        // Lock the base address of the pixel buffer
+        CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
+        
+        // Get the number of bytes per row for the pixel buffer
+        let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer)
+        
+        // Get the number of bytes per row for the pixel buffer
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
+        // Get the pixel buffer width and height
+        let width = CVPixelBufferGetWidth(imageBuffer)
+        let height = CVPixelBufferGetHeight(imageBuffer)
+        
+        // Create a device-dependent RGB color space
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        
+        // Create a bitmap graphics context with the sample buffer data
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        if let context = CGContext(
+            data: baseAddress,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue) {
+            // Create a Quartz image from the pixel data in the bitmap graphics context
+            if let quartzImage = context.makeImage() {
+                // Create an image object from the Quartz image
+                let image = UIImage(cgImage: quartzImage)
+                // Unlock the pixel buffer
+                CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly)
+                return image
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly)
+        return nil
+    }
+    
+    open func takePhoto(_ completion: ((UIImage?) -> Void)?) {
+        var filterToCapture: GPUImageOutput!
+        if let lastFilter = self.lastFilter {
+            filterToCapture = lastFilter
+        } else {
+            filterToCapture = defaultFilter
+        }
+        var imageOrientation: UIImageOrientation!
+        switch cameraPosition {
+        case .back:
+            imageOrientation = .up
+        default:
+            imageOrientation = .upMirrored
+        }
+        camera.capturePhotoAsImageProcessedUp(toFilter: filterToCapture, with: imageOrientation) { (image, error) in
+            completion?(image)
+        }
+    }
 }
 
 
@@ -205,33 +273,34 @@ extension CameraPreviewController {
             lastFilter.removeAllTargets()
             lastFilter.addTarget(filter)
         } else {
-            camera.removeAllTargets()
-            camera.addTarget(filter)
+            defaultFilter.removeAllTargets()
+            defaultFilter.addTarget(filter)
         }
         filter.addTarget(preview)
         filters.append(filter)
     }
     
     open func add(newFilters: [GPUImageFilter]?) {
-        guard let newFilters = newFilters, let firstFilter = newFilters.first, newFilters.count > 0 else { return }
+        guard let newFilters = newFilters, let firstNewFilter = newFilters.first, newFilters.count > 0 else { return }
         if let lastFilter = self.lastFilter {
             lastFilter.removeAllTargets()
-            lastFilter.addTarget(firstFilter)
+            lastFilter.addTarget(firstNewFilter)
         } else {
-            camera.addTarget(firstFilter)
+            defaultFilter.removeAllTargets()
+            defaultFilter.addTarget(firstNewFilter)
         }
         filters.append(contentsOf: filters)
         filters.last?.addTarget(preview)
     }
     
     open func removeFilters() {
-        camera.removeAllTargets()
+        defaultFilter.removeAllTargets()
         for filter in filters {
             filter.removeAllTargets()
             filter.removeFramebuffer()
         }
         filters.removeAll()
-        camera.addTarget(preview)
+        defaultFilter.addTarget(preview)
     }
 }
 
