@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'CameraPreviewController'
-  s.version          = '0.9.1'
+  s.version          = '1.0.0'
   s.summary          = 'Basic camera preview controller based on GPUImage library inside.'
 
 # This description is used to generate tags and improve search results.

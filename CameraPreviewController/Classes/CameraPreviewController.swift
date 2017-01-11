@@ -34,7 +34,7 @@ open class CameraPreviewController: UIViewController {
         willSet(isEnabled) {
             if isEnabled {
                 if faceDetector == nil {
-                    let detectorOptions = [CIDetectorAccuracy: CIDetectorAccuracyLow]
+                    let detectorOptions = [CIDetectorAccuracy: CIDetectorAccuracyHigh]
                     faceDetector = CIDetector(ofType: CIDetectorTypeFace, context: nil, options: detectorOptions)
                 }
             } else {
@@ -83,32 +83,49 @@ extension CameraPreviewController {
     open func initPreview() {
         if preview == nil {
             preview = GPUImageView()
-            
-            if let prefersFillMode = delegate?.cameraPreviewPreferredFillMode(preview: preview), prefersFillMode {
-                preview.fillMode = kGPUImageFillModePreserveAspectRatioAndFill
-            }
-            
-            switch cameraPosition {
-            case .front:
-                preview.transform = preview.transform.scaledBy(x: -1, y: 1)
-                break
-            default:
-                break
-            }
-            
             delegate?.cameraPreviewNeedsLayout(preview: preview)
             if preview.superview == nil {
                 _ = view.attachFilling(preview)
             }
+        }
+        
+        // config fill mode
+        if let prefersFillMode = delegate?.cameraPreviewPreferredFillMode(preview: preview), prefersFillMode {
+            preview.fillMode = kGPUImageFillModePreserveAspectRatioAndFill
+        }
+        
+        // transform preview by camera position
+        switch cameraPosition {
+        case .back:
+            preview.transform = CGAffineTransform.identity
+        default:
+            preview.transform = preview.transform.scaledBy(x: -1, y: 1)
         }
     }
     
     open func initCamera() {
         deinitCamera()
         camera = GPUImageVideoCamera(sessionPreset: capturePreset, cameraPosition: cameraPosition)
-        camera.outputImageOrientation = .portrait
+        switch cameraPosition {
+        case .back:
+            camera.outputImageOrientation = .portrait
+        default:
+            camera.outputImageOrientation = .portrait
+        }
         camera.delegate = self
         camera.addTarget(preview)
+    }
+    
+    open func flipCamera() {
+        switch cameraPosition {
+        case .back:
+            cameraPosition = .front
+        default:
+            cameraPosition = .back
+        }
+        initPreview()
+        initCamera()
+        startCapture()
     }
     
     open func pauseCapture() {
@@ -144,6 +161,30 @@ extension CameraPreviewController {
         captureCount = 0
     }
 }
+
+// MARK: - Camera APIs
+extension CameraPreviewController {
+    
+    open var torchMode: AVCaptureTorchMode {
+        set(newMode) {
+            if let device = camera.inputCamera, device.hasTorch {
+                do {
+                    try device.lockForConfiguration()
+                    device.torchMode = newMode
+                    device.unlockForConfiguration()
+                } catch {
+                    logw("Current camera(\(cameraPosition)) does not support torch mode: \(newMode)")
+                }
+            } else {
+                logw("Torch is not available in current camera(\(cameraPosition)).")
+            }
+        }
+        get {
+            return camera.inputCamera.torchMode
+        }
+    }
+}
+
 
 // MARK: - Filter APIs
 extension CameraPreviewController {
@@ -279,7 +320,7 @@ extension CameraPreviewController {
     }
     
     open func showFaceRects(_ faceFeatures: [CIFaceFeature]?, aperture: CGRect, orientation: UIDeviceOrientation, viewSource: (() -> UIView?)? = nil) {
-        guard let faceFeatures = faceFeatures, faceFeatures.count > 0 else { return }
+        guard let faceFeatures = faceFeatures, faceFeatures.count > 0, isFaceDetectorEnabled else { return }
         
         let previewFrame = preview.frame
         removeFaceViews()
