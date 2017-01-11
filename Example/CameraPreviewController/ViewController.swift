@@ -84,7 +84,7 @@ class ViewController: CameraPreviewController {
     }
 }
 
-extension CameraPreviewController {
+extension ViewController {
     
     public func pressedTakePhoto(sender: UIButton) {
         takePhoto({ image in
@@ -138,7 +138,7 @@ extension CameraPreviewController {
     }
 }
 
-extension CameraPreviewController: CameraPreviewControllerDelegate {
+extension ViewController: CameraPreviewControllerDelegate {
     
     public func cameraPreviewWillOutputSampleBuffer(buffer: CMSampleBuffer, sequence: UInt64) {
         
@@ -154,20 +154,11 @@ extension CameraPreviewController: CameraPreviewControllerDelegate {
     
 }
 
-extension CameraPreviewController: CameraPreviewControllerFaceDetectionDelegate {
+extension ViewController: CameraPreviewControllerFaceDetectionDelegate {
     public func cameraPreviewDetectedFaces(preview: GPUImageView, features: [CIFeature]?, aperture: CGRect, orientation: UIDeviceOrientation) {
         
-        guard let features = features, features.count > 0 else {
+        guard let faces = features as? [CIFaceFeature], faces.count > 0 else {
             return
-        }
-        var faces = [CIFaceFeature]()
-        
-        for feature in features {
-            if let face = feature as? CIFaceFeature {
-                faces.append(face)
-            } else {
-                logw("CIFeature object is not a kind of CIFaceFeature.")
-            }
         }
         
         showFaceRects(faces, aperture: aperture, orientation: orientation)
