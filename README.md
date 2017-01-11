@@ -11,7 +11,13 @@ To run the example project, clone the repo, and run `pod install` from the Examp
 
 ## Requirements
 
-GPUImage
+Xcode8, Swift 3
+
+## Dependency
+
+Sample: TinyLog, GPUImage, SwiftARGB
+
+Pods: TinyLog, GPUImage, AttachLayout
 
 ## Installation
 
