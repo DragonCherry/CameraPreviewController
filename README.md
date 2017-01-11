@@ -11,6 +11,8 @@ To run the example project, clone the repo, and run `pod install` from the Examp
 
 ## Requirements
 
+GPUImage
+
 ## Installation
 
 CameraPreviewController is available through [CocoaPods](http://cocoapods.org). To install
