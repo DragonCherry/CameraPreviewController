@@ -14,17 +14,25 @@ I'm writing this since I couldn't find a open source with complete basic source 
 This example contains the following features.
 
 1) front camera preview / still capture
+
 2) back camera preview / still capture
+
 3) flipping camera
+
 4) torch control
+
 5) tap to focus
+
 6) add/remove filter
+
 7) face detection
 
 I'm going to add more features that every camera application must have.
 
 To-do
+
 1) pinch to zoom
+
 2) ?
 
 Please don't hesitate contribute on this project. Any advice and suggestions will be greatly appreciated.
