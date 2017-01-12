@@ -11,25 +11,53 @@ import TinyLog
 import AttachLayout
 import GPUImage
 
+// MARK: - Declaration for CameraPreviewControllerDelegate
 public protocol CameraPreviewControllerDelegate: class {
-    func cameraPreviewWillOutputSampleBuffer(buffer: CMSampleBuffer, sequence: UInt64)
-    func cameraPreviewNeedsLayout(preview: GPUImageView)
-    func cameraPreviewPreferredFillMode(preview: GPUImageView) -> Bool
+    func cameraPreview(_ controller: CameraPreviewController, willOutput sampleBuffer: CMSampleBuffer, with sequence: UInt64)
+    func cameraPreview(_ controller: CameraPreviewController, willFocusInto tappedLocationInView: CGPoint, tappedLocationInImage: CGPoint)
 }
 
+// MARK: - Declaration for CameraPreviewControllerLayoutSource
+public protocol CameraPreviewControllerLayoutSource: class {
+    func cameraPreviewNeedsLayout(_ controller: CameraPreviewController, preview: GPUImageView)
+    func cameraPreviewNeedsFillMode(_ controller: CameraPreviewController) -> Bool
+}
+
+// MARK: - Declaration for CameraPreviewControllerFaceDetectionDelegate
 public protocol CameraPreviewControllerFaceDetectionDelegate: class {
-    func cameraPreviewDetectedFaces(preview: GPUImageView, features: [CIFeature]?, aperture: CGRect, orientation: UIDeviceOrientation)
-    
+    func cameraPreview(_ controller: CameraPreviewController, detected faceFeatures: [CIFaceFeature]?, aperture: CGRect, orientation: UIDeviceOrientation)
 }
 
+// MARK: - Declaration for CameraPreviewController
 open class CameraPreviewController: UIViewController {
     
+    // MARK: Delegates
     open weak var delegate: CameraPreviewControllerDelegate?
+    open weak var layoutSource: CameraPreviewControllerLayoutSource?
     open weak var faceDetectionDelegate: CameraPreviewControllerFaceDetectionDelegate?
     
+    // MARK: Common Properties
     open var cameraPosition: AVCaptureDevicePosition = .front
     open var capturePreset: String = AVCaptureSessionPresetHigh
+    open var captureSequence: UInt64 = 0
+    private var _resolution: CGSize = .zero
+    open var resolution: CGSize {
+        get { return _resolution }
+        set { _resolution = newValue }
+    }
     
+    fileprivate var camera: GPUImageStillCamera!
+    fileprivate var preview: GPUImageView!
+    
+    // MARK: Filter
+    /** Default filter for capturing still image, and this is recommeded by BradLarson in https://github.com/BradLarson/GPUImage/issues/1874 */
+    fileprivate var defaultFilter: GPUImageFilter! = GPUImageFilter()
+    fileprivate var filters = [GPUImageFilter]()
+    fileprivate var lastFilter: GPUImageOutput? { return filters.last }
+    
+    // MARK: Face Detection
+    fileprivate var faceDetector: CIDetector?
+    fileprivate var faceViews = [UIView]()
     /** Setting this true invokes cameraPreviewDetectedFaces one per faceDetectFrequency frame. Default frequency is 10, if you want to detect face more frequent, set faceDetectFrequency as smaller number. */
     open var isFaceDetectorEnabled: Bool = false {
         willSet(isEnabled) {
@@ -45,17 +73,20 @@ open class CameraPreviewController: UIViewController {
     }
     /** Setting smaller number makes it detect face more frequent. Regards zero as default value 30. */
     open var faceDetectFrequency: UInt = 30
-    open var captureCount: UInt64 = 0
     
-    fileprivate var camera: GPUImageStillCamera!
-    fileprivate var preview: GPUImageView!
-    /** Default filter for capturing still image, and this is recommeded by BradLarson in https://github.com/BradLarson/GPUImage/issues/1874 */
-    fileprivate var defaultFilter: GPUImageFilter! = GPUImageFilter()
-    fileprivate var filters = [GPUImageFilter]()
-    fileprivate var lastFilter: GPUImageOutput? { return filters.last }
-    fileprivate var faceDetector: CIDetector?
-    fileprivate var faceViews = [UIView]()
+    // MARK: Tap to Focus
+    open var isTapToFocusEnabled: Bool = true {
+        didSet {
+            if isTapToFocusEnabled {
+                initTapToFocusGesture()
+            } else {
+                deinitTapToFocusGesture()
+            }
+        }
+    }
+    fileprivate var tapToFocusGesture: UITapGestureRecognizer?
     
+    // MARK: - Lifecycle for UIViewController
     override open func viewDidLoad() {
         super.viewDidLoad()
         initPreview()
@@ -76,6 +107,7 @@ open class CameraPreviewController: UIViewController {
     }
     
     deinit {
+        deinitTapToFocusGesture()
         deinitCamera()
     }
 }
@@ -86,14 +118,14 @@ extension CameraPreviewController {
     open func initPreview() {
         if preview == nil {
             preview = GPUImageView()
-            delegate?.cameraPreviewNeedsLayout(preview: preview)
+            layoutSource?.cameraPreviewNeedsLayout(self, preview: preview)
             if preview.superview == nil {
                 _ = view.attachFilling(preview)
             }
         }
         
         // config fill mode
-        if let prefersFillMode = delegate?.cameraPreviewPreferredFillMode(preview: preview), prefersFillMode {
+        if let prefersFillMode = layoutSource?.cameraPreviewNeedsFillMode(self), prefersFillMode {
             preview.fillMode = kGPUImageFillModePreserveAspectRatioAndFill
         }
         
@@ -103,6 +135,11 @@ extension CameraPreviewController {
             preview.transform = CGAffineTransform.identity
         default:
             preview.transform = preview.transform.scaledBy(x: -1, y: 1)
+        }
+        
+        // tap to focus
+        if isTapToFocusEnabled {
+            initTapToFocusGesture()
         }
     }
     
@@ -161,25 +198,113 @@ extension CameraPreviewController {
             camera.removeAudioInputsAndOutputs()
             camera.removeFramebuffer()
         }
-        captureCount = 0
+        captureSequence = 0
+    }
+}
+
+// MARK: - Internal Methods
+extension CameraPreviewController {
+    
+    fileprivate func fetchMetaInfo(_ sampleBuffer: CMSampleBuffer) {
+        if captureSequence == 0 {
+            guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                loge("Failed to get image buffer from CMSampleBuffer object.")
+                return
+            }
+            let width = CVPixelBufferGetWidth(imageBuffer)
+            let height = CVPixelBufferGetHeight(imageBuffer)
+            resolution = CGSize(width: width, height: height)
+            logi("Successfully fetched meta info from sample buffer.")
+        }
+    }
+}
+
+// MARK: - Tap to Focus
+extension CameraPreviewController: UIGestureRecognizerDelegate {
+    
+    open func initTapToFocusGesture() {
+        deinitTapToFocusGesture()
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(tappedCameraPreview))
+        tapGesture.numberOfTapsRequired = 1
+        tapGesture.numberOfTouchesRequired = 1
+        tapGesture.delegate = self
+        preview.addGestureRecognizer(tapGesture)
+        self.tapToFocusGesture = tapGesture
+    }
+    
+    open func deinitTapToFocusGesture() {
+        if let tapGesture = self.tapToFocusGesture {
+            tapGesture.removeTarget(self, action: #selector(tappedCameraPreview))
+            preview.removeGestureRecognizer(tapGesture)
+            self.tapToFocusGesture = nil
+        }
+    }
+    
+    open func tappedCameraPreview(gesture: UITapGestureRecognizer) {
+        logi("User tapped camera preview.")
+        guard resolution != .zero else {
+            logw("Cannot convert and locate point to focus into since resolution for current image is not ready yet.")
+            return
+        }
+        let point = gesture.location(in: preview)
+        
+        let scaleX = point.x / preview.width
+        let scaleY = point.y / preview.height
+        
+        if camera.inputCamera.isFocusPointOfInterestSupported {
+            lockForConfiguration({ (device, locked) in
+                guard let device = device, locked else { return }
+                let locationInImage = CGPoint(x: scaleX, y: scaleY)
+                device.focusPointOfInterest = locationInImage
+                if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                } else if device.isFocusModeSupported(.autoFocus) {
+                    device.focusMode = .autoFocus
+                }
+                switch self.cameraPosition {
+                case .back:
+                    self.delegate?.cameraPreview(self, willFocusInto: point, tappedLocationInImage: locationInImage)
+                default:
+                    self.delegate?.cameraPreview(
+                        self,
+                        willFocusInto: CGPoint(x: self.preview.width - point.x, y: point.y),
+                        tappedLocationInImage: CGPoint(x: 1 - locationInImage.x, y: point.y)
+                    )
+                }
+            })
+        }
     }
 }
 
 // MARK: - Camera APIs
 extension CameraPreviewController {
     
+    fileprivate func lockForConfiguration(_ task: ((AVCaptureDevice?, Bool) -> Void)?) {
+        guard let device = camera.inputCamera else {
+            loge("Failed to get inputCamera.")
+            task?(nil, false)
+            return
+        }
+        do {
+            try device.lockForConfiguration()
+            task?(device, true)
+            device.unlockForConfiguration()
+        } catch {
+            logw("Failed to lock camera for configuration.")
+            task?(device, false)
+        }
+    }
+    
     open var torchMode: AVCaptureTorchMode {
         set(newMode) {
             if let device = camera.inputCamera, device.hasTorch {
-                do {
-                    try device.lockForConfiguration()
-                    device.torchMode = newMode
-                    device.unlockForConfiguration()
-                } catch {
-                    logw("Current camera(\(cameraPosition)) does not support torch mode: \(newMode)")
-                }
+                lockForConfiguration({ (_, locked) in
+                    if locked {
+                        device.torchMode = newMode
+                    }
+                })
             } else {
-                logw("Torch is not available in current camera(\(cameraPosition)).")
+                logw("Torch is not available in current camera.")
             }
         }
         get {
@@ -203,6 +328,7 @@ extension CameraPreviewController {
         
         // Get the number of bytes per row for the pixel buffer
         let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
+        
         // Get the pixel buffer width and height
         let width = CVPixelBufferGetWidth(imageBuffer)
         let height = CVPixelBufferGetHeight(imageBuffer)
@@ -432,14 +558,16 @@ extension CameraPreviewController {
     }
 }
 
+// MARK: - Implementation for GPUImageVideoCameraDelegate
 extension CameraPreviewController: GPUImageVideoCameraDelegate {
     
     open func willOutputSampleBuffer(_ sampleBuffer: CMSampleBuffer!) {
         
-        delegate?.cameraPreviewWillOutputSampleBuffer(buffer: sampleBuffer, sequence: captureCount)
-        captureCount += 1
+        fetchMetaInfo(sampleBuffer)
+        delegate?.cameraPreview(self, willOutput: sampleBuffer, with: captureSequence)
+        captureSequence += 1
         
-        guard isFaceDetectorEnabled && captureCount % UInt64(faceDetectFrequency) == 0 else { return }
+        guard isFaceDetectorEnabled && captureSequence % UInt64(faceDetectFrequency) == 0 else { return }
         
         features(from: sampleBuffer, completion: { features, aperture, orientation in
             guard let features = features else { return }
@@ -451,7 +579,7 @@ extension CameraPreviewController: GPUImageVideoCameraDelegate {
                     print("CIFeature object is not a kind of CIFaceFeature.")
                 }
             }
-            self.faceDetectionDelegate?.cameraPreviewDetectedFaces(preview: self.preview, features: faceFeatures, aperture: aperture, orientation: orientation)
+            self.faceDetectionDelegate?.cameraPreview(self, detected: faceFeatures, aperture: aperture, orientation: orientation)
         })
     }
 }

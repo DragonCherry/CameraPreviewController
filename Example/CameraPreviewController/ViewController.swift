@@ -36,7 +36,11 @@ class ViewController: CameraPreviewController {
     
     override func loadView() {
         super.loadView()
+        cameraPosition = .back          // initial camera position
+        
+        // set delegates
         delegate = self
+        layoutSource = self
         faceDetectionDelegate = self
     }
     
@@ -138,29 +142,33 @@ extension ViewController {
     }
 }
 
+// MARK: - Implementation for CameraPreviewControllerDelegate
 extension ViewController: CameraPreviewControllerDelegate {
-    
-    public func cameraPreviewWillOutputSampleBuffer(buffer: CMSampleBuffer, sequence: UInt64) {
+    func cameraPreview(_ controller: CameraPreviewController, willOutput sampleBuffer: CMSampleBuffer, with sequence: UInt64) {
         
     }
-    
-    public func cameraPreviewNeedsLayout(preview: GPUImageView) {
-        _ = view.attachFilling(preview, insets: UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0))
+    func cameraPreview(_ controller: CameraPreviewController, willFocusInto locationInView: CGPoint, tappedLocationInImage locationInImage: CGPoint) {
+        logi("Focusing location in view: \(locationInView)")
+        logi("Focusing location(ratio) in image: \(locationInImage)")
     }
-    
-    public func cameraPreviewPreferredFillMode(preview: GPUImageView) -> Bool {
-        return true
-    }
-    
 }
 
+// MARK: - Implementation for CameraPreviewControllerLayoutSource
+extension ViewController: CameraPreviewControllerLayoutSource {
+    func cameraPreviewNeedsLayout(_ controller: CameraPreviewController, preview: GPUImageView) {
+        _ = view.attachFilling(preview, insets: UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0))
+    }
+    func cameraPreviewNeedsFillMode(_ controller: CameraPreviewController) -> Bool {
+        return true     // false to aspect fit mode
+    }
+}
+
+// MARK: - Implementation for CameraPreviewControllerFaceDetectionDelegate
 extension ViewController: CameraPreviewControllerFaceDetectionDelegate {
-    public func cameraPreviewDetectedFaces(preview: GPUImageView, features: [CIFeature]?, aperture: CGRect, orientation: UIDeviceOrientation) {
-        
-        guard let faces = features as? [CIFaceFeature], faces.count > 0 else {
+    func cameraPreview(_ controller: CameraPreviewController, detected faceFeatures: [CIFaceFeature]?, aperture: CGRect, orientation: UIDeviceOrientation) {
+        guard let faces = faceFeatures, faces.count > 0 else {
             return
         }
-        
         showFaceRects(faces, aperture: aperture, orientation: orientation)
         
         logd("detected face count: \(faces.count)")
