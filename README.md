@@ -35,7 +35,7 @@ To-do
 
 2) ?
 
-Please don't hesitate contribute on this project. Any advice and suggestions will be greatly appreciated.
+Please don't hesitate to contribute on this project. Any advice and suggestions will be greatly appreciated.
 
 ### Functions
 
