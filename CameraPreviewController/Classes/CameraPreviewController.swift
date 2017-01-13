@@ -259,7 +259,6 @@ extension CameraPreviewController {
     }
     
     open func tappedCameraPreview(gesture: UITapGestureRecognizer) {
-        logi("User tapped camera preview.")
         guard resolution != .zero else {
             logw("Cannot convert and locate point to focus into since resolution for current image is not ready yet.")
             return
