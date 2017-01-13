@@ -166,21 +166,21 @@ extension ViewController: CameraPreviewControllerLayoutSource {
 // MARK: - Implementation for CameraPreviewControllerFaceDetectionDelegate
 extension ViewController: CameraPreviewControllerFaceDetectionDelegate {
     func cameraPreview(_ controller: CameraPreviewController, detected faceFeatures: [CIFaceFeature]?, aperture: CGRect, orientation: UIDeviceOrientation) {
-        guard let faces = faceFeatures, faces.count > 0 else {
-            return
-        }
-        showFaceRects(faces, aperture: aperture, orientation: orientation)
         
-        logd("detected face count: \(faces.count)")
-        for (i, face) in faces.enumerated() {
-            log("### FACE NO.\(i + 1)")
-            log("hasFaceAngle: \(face.hasFaceAngle) -> \(face.faceAngle)")
-            log("leftEyeClosed: \(face.leftEyeClosed)")
-            log("hasLeftEyePosition: \(face.hasLeftEyePosition) -> \(face.leftEyePosition)")
-            log("rightEyeClosed: \(face.rightEyeClosed)")
-            log("hasRightEyePosition: \(face.hasRightEyePosition) -> \(face.rightEyePosition)")
-            log("hasMouthPosition: \(face.hasMouthPosition) -> \(face.mouthPosition)")
-            log("hasSmile: \(face.hasSmile)")
+        showFaceRects(faceFeatures, aperture: aperture, orientation: orientation)
+        
+        if let faces = faceFeatures {
+            logd("detected face count: \(faces.count)")
+            for (i, face) in faces.enumerated() {
+                log("### FACE NO.\(i + 1)")
+                log("hasFaceAngle: \(face.hasFaceAngle) -> \(face.faceAngle)")
+                log("leftEyeClosed: \(face.leftEyeClosed)")
+                log("hasLeftEyePosition: \(face.hasLeftEyePosition) -> \(face.leftEyePosition)")
+                log("rightEyeClosed: \(face.rightEyeClosed)")
+                log("hasRightEyePosition: \(face.hasRightEyePosition) -> \(face.rightEyePosition)")
+                log("hasMouthPosition: \(face.hasMouthPosition) -> \(face.mouthPosition)")
+                log("hasSmile: \(face.hasSmile)")
+            }
         }
     }
 }
