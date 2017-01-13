@@ -86,6 +86,19 @@ open class CameraPreviewController: UIViewController {
     }
     fileprivate var tapToFocusGesture: UITapGestureRecognizer?
     
+    // MARK: Pinch to Zoom
+    open var isPinchToZoomEnabled: Bool = true {
+        didSet {
+            if isPinchToZoomEnabled {
+                initPinchToZoomGesture()
+            } else {
+                deinitPinchToZoomGesture()
+            }
+        }
+    }
+    fileprivate var pinchToZoomGesture: UIPinchGestureRecognizer?
+    fileprivate var pivotPinchScale: CGFloat = 1
+    
     // MARK: - Lifecycle for UIViewController
     override open func viewDidLoad() {
         super.viewDidLoad()
@@ -113,7 +126,7 @@ open class CameraPreviewController: UIViewController {
 }
 
 // MARK: - Lifecycle APIs
-extension CameraPreviewController {
+extension CameraPreviewController: UIGestureRecognizerDelegate {
     
     open func initPreview() {
         if preview == nil {
@@ -140,6 +153,11 @@ extension CameraPreviewController {
         // tap to focus
         if isTapToFocusEnabled {
             initTapToFocusGesture()
+        }
+        
+        // pinch to zoom
+        if isPinchToZoomEnabled {
+            initPinchToZoomGesture()
         }
     }
     
@@ -220,7 +238,7 @@ extension CameraPreviewController {
 }
 
 // MARK: - Tap to Focus
-extension CameraPreviewController: UIGestureRecognizerDelegate {
+extension CameraPreviewController {
     
     open func initTapToFocusGesture() {
         deinitTapToFocusGesture()
@@ -272,6 +290,45 @@ extension CameraPreviewController: UIGestureRecognizerDelegate {
                     )
                 }
             })
+        }
+    }
+}
+
+// MARK: - Pinch to Zoom
+extension CameraPreviewController {
+    
+    open func initPinchToZoomGesture() {
+        deinitPinchToZoomGesture()
+        let pinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(pinchedCameraPreview))
+        pinchGesture.delegate = self
+        preview.addGestureRecognizer(pinchGesture)
+        self.pinchToZoomGesture = pinchGesture
+    }
+    
+    open func deinitPinchToZoomGesture() {
+        if let pinchGesture = self.pinchToZoomGesture {
+            pinchGesture.removeTarget(self, action: #selector(pinchedCameraPreview))
+            preview.removeGestureRecognizer(pinchGesture)
+            self.tapToFocusGesture = nil
+        }
+    }
+    
+    open func pinchedCameraPreview(gesture: UIPinchGestureRecognizer) {
+        lockForConfiguration { (device, locked) in
+            guard let device = device, locked else { return }
+            
+            switch gesture.state {
+            case .began:
+                self.pivotPinchScale = device.videoZoomFactor
+            case .changed:
+                var factor = self.pivotPinchScale * gesture.scale
+                factor = max(1, min(factor, device.activeFormat.videoMaxZoomFactor))
+                device.videoZoomFactor = factor
+            case .failed, .ended:
+                break
+            default:
+                break
+            }
         }
     }
 }
@@ -515,7 +572,10 @@ extension CameraPreviewController {
     }
     
     open func showFaceRects(_ faceFeatures: [CIFaceFeature]?, aperture: CGRect, orientation: UIDeviceOrientation, viewSource: (() -> UIView?)? = nil) {
-        guard let faceFeatures = faceFeatures, faceFeatures.count > 0, isFaceDetectorEnabled else { return }
+        guard let faceFeatures = faceFeatures, faceFeatures.count > 0, isFaceDetectorEnabled else {
+            removeFaceViews()
+            return
+        }
         
         let previewFrame = preview.frame
         removeFaceViews()
@@ -579,7 +639,11 @@ extension CameraPreviewController: GPUImageVideoCameraDelegate {
                     print("CIFeature object is not a kind of CIFaceFeature.")
                 }
             }
-            self.faceDetectionDelegate?.cameraPreview(self, detected: faceFeatures, aperture: aperture, orientation: orientation)
+            if faceFeatures.count > 0 {
+                self.faceDetectionDelegate?.cameraPreview(self, detected: faceFeatures, aperture: aperture, orientation: orientation)
+            } else {
+                self.faceDetectionDelegate?.cameraPreview(self, detected: nil, aperture: aperture, orientation: orientation)
+            }
         })
     }
 }
