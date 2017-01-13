@@ -27,13 +27,9 @@ This example contains the following features.
 
 7) face detection
 
+8) pinch to zoom in/out
+
 I'm going to add more features that every camera application must have.
-
-To-do
-
-1) pinch to zoom
-
-2) ?
 
 Please don't hesitate to contribute on this project. Any advice and suggestions will be greatly appreciated.
 
