@@ -7,6 +7,9 @@
 //
 
 import UIKit
+import ImageIO
+import CoreGraphics
+import MobileCoreServices
 import TinyLog
 import AttachLayout
 import GPUImage
@@ -15,6 +18,7 @@ import GPUImage
 public protocol CameraPreviewControllerDelegate: class {
     func cameraPreview(_ controller: CameraPreviewController, willOutput sampleBuffer: CMSampleBuffer, with sequence: UInt64)
     func cameraPreview(_ controller: CameraPreviewController, willFocusInto tappedLocationInView: CGPoint, tappedLocationInImage: CGPoint)
+    func cameraPreview(_ controller: CameraPreviewController, willOutputGIF gifURL: URL?)
 }
 
 // MARK: - Declaration for CameraPreviewControllerLayoutSource
@@ -98,6 +102,36 @@ open class CameraPreviewController: UIViewController {
     }
     fileprivate var pinchToZoomGesture: UIPinchGestureRecognizer?
     fileprivate var pivotPinchScale: CGFloat = 1
+    
+    // MARK: GIF
+    open var isCapturingGIF: Bool = false {
+        willSet {
+            if newValue {
+                initGIF()
+            } else {
+                createGIF({ (gifURL) in
+                    DispatchQueue.main.async {
+                        self.delegate?.cameraPreview(self, willOutputGIF: gifURL)
+                    }
+                })
+            }
+        }
+    }
+    open var GIFSourceQuality: CGFloat = 0.8 {
+        didSet {
+            if GIFSourceQuality < 0 {
+                GIFSourceQuality = 0.1
+            } else if GIFSourceQuality > 1 {
+                GIFSourceQuality = 1
+            }
+        }
+    }
+    open var temporaryGIFDirectoryName: String = "temporary_directory_for_creating_gif"
+    internal var temporaryGIFDirectory: String?
+    internal var temporaryGIFFile: String = UUID().uuidString
+    internal var temporaryGIFSequence: Int = 0
+    internal var serialGIFQueue: DispatchQueue = DispatchQueue(label: UUID().uuidString, qos: .background)
+    internal let gpuPicture = GPUImagePicture()
     
     // MARK: - Lifecycle for UIViewController
     override open func viewDidLoad() {
@@ -369,50 +403,7 @@ extension CameraPreviewController {
     }
     
     open func image(from sampleBuffer: CMSampleBuffer) -> UIImage? {
-        
-        // Get a CMSampleBuffer's Core Video image buffer for the media data
-        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            loge("Failed to get image buffer from CMSampleBuffer object.")
-            return nil
-        }
-        
-        // Lock the base address of the pixel buffer
-        CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
-        
-        // Get the number of bytes per row for the pixel buffer
-        let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer)
-        
-        // Get the number of bytes per row for the pixel buffer
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
-        
-        // Get the pixel buffer width and height
-        let width = CVPixelBufferGetWidth(imageBuffer)
-        let height = CVPixelBufferGetHeight(imageBuffer)
-        
-        // Create a device-dependent RGB color space
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        
-        // Create a bitmap graphics context with the sample buffer data
-        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
-        if let context = CGContext(
-            data: baseAddress,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue) {
-            // Create a Quartz image from the pixel data in the bitmap graphics context
-            if let quartzImage = context.makeImage() {
-                // Create an image object from the Quartz image
-                let image = UIImage(cgImage: quartzImage)
-                // Unlock the pixel buffer
-                CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly)
-                return image
-            }
-        }
-        CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly)
-        return nil
+        return CoreImageUtils.image(fromYUVSampleBuffer: sampleBuffer)
     }
     
     open func takePhoto(_ completion: ((UIImage?) -> Void)?) {
@@ -622,10 +613,15 @@ extension CameraPreviewController: GPUImageVideoCameraDelegate {
     
     open func willOutputSampleBuffer(_ sampleBuffer: CMSampleBuffer!) {
         
+        // initialize meta info
         fetchMetaInfo(sampleBuffer)
         delegate?.cameraPreview(self, willOutput: sampleBuffer, with: captureSequence)
         captureSequence += 1
         
+        // creating GIF
+        saveGIFFragment(sampleBuffer)
+        
+        // face detection
         guard isFaceDetectorEnabled && captureSequence % UInt64(faceDetectFrequency) == 0 else { return }
         
         features(from: sampleBuffer, completion: { features, aperture, orientation in

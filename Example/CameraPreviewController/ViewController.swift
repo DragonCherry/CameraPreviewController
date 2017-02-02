@@ -27,6 +27,9 @@ class ViewController: CameraPreviewController {
     var btnToggleFlash: UIButton!
     var btnTakePhoto: UIButton!
     
+    // Buttons for creating GIF
+    var btnCreateGIF: UIButton!
+    
     // Buttons for recognization functionalities
     var btnToggleDetectFace: UIButton!
     
@@ -58,6 +61,13 @@ class ViewController: CameraPreviewController {
         btnToggleCamera = UIButton(height: height, title: "Toggle Camera", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedToggleCamera))
         btnToggleFlash = UIButton(height: height, title: "Toggle Flash", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedToggleFlash))
         btnTakePhoto = UIButton(height: height, title: "Take Photo", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedTakePhoto))
+        btnCreateGIF = UIButton(height: height)
+        btnCreateGIF.setTitle("Create GIF", for: .normal)
+        btnCreateGIF.setTitleColor(textColor, for: .normal)
+        btnCreateGIF.backgroundColor = basicColor
+        btnCreateGIF.titleLabel?.font = UIFont.systemFont(ofSize: textSize)
+        btnCreateGIF.addTarget(self, action: #selector(startCreateGIF), for: .touchDown)
+        btnCreateGIF.addTarget(self, action: #selector(finishCreateGIF), for: .touchUpInside)
         
         // Buttons for recognization functionalities
         btnToggleDetectFace = UIButton(height: height, title: "Enable Face Detection", textSize: textSize, textColor: textColor, backgroundColor: recognitionColor, target: self, selector: #selector(pressedToggleDetect))
@@ -72,9 +82,10 @@ class ViewController: CameraPreviewController {
         
         _ = view.attach(btnToggleDetectFace, on: .top, of: btnAddFilter, widthMultiplier: 0)
         
-        _ = view.attach(btnToggleCamera, on: .top, of: btnToggleDetectFace, widthMultiplier: 1/3)
-        _ = view.attach(btnToggleFlash, on: .right, of: btnToggleCamera, widthMultiplier: 1/3)
-        _ = view.attach(btnTakePhoto, on: .right, of: btnToggleFlash, widthMultiplier: 0)
+        _ = view.attach(btnToggleCamera, on: .top, of: btnToggleDetectFace, widthMultiplier: 1/4)
+        _ = view.attach(btnToggleFlash, on: .right, of: btnToggleCamera, widthMultiplier: 1/4)
+        _ = view.attach(btnTakePhoto, on: .right, of: btnToggleFlash, widthMultiplier: 1/4)
+        _ = view.attach(btnCreateGIF, on: .right, of: btnTakePhoto, widthMultiplier: 0)
     }
     
     override func viewDidLayoutSubviews() {
@@ -82,6 +93,7 @@ class ViewController: CameraPreviewController {
         btnToggleCamera.showBorder()
         btnToggleFlash.showBorder()
         btnTakePhoto.showBorder()
+        btnCreateGIF.showBorder()
         btnToggleDetectFace.showBorder()
         btnAddFilter.showBorder()
         btnClearFilters.showBorder()
@@ -89,14 +101,6 @@ class ViewController: CameraPreviewController {
 }
 
 extension ViewController {
-    
-    public func pressedTakePhoto(sender: UIButton) {
-        takePhoto({ image in
-            let photoVC = PhotoViewController()
-            photoVC.image = image
-            self.present(photoVC, animated: true, completion: nil)
-        })
-    }
     
     public func pressedToggleCamera(sender: UIButton) {
         flipCamera()
@@ -120,6 +124,22 @@ extension ViewController {
             torchMode = .auto
             sender.setTitle("Torch: Set auto", for: .normal)
         }
+    }
+    
+    public func pressedTakePhoto(sender: UIButton) {
+        takePhoto({ image in
+            let photoVC = PhotoViewController()
+            photoVC.image = image
+            self.present(photoVC, animated: true, completion: nil)
+        })
+    }
+    
+    public func startCreateGIF(sender: UIButton) {
+        isCapturingGIF = true
+    }
+    
+    public func finishCreateGIF(sender: UIButton) {
+        isCapturingGIF = false
     }
     
     public func pressedToggleDetect(sender: UIButton) {
@@ -150,6 +170,28 @@ extension ViewController: CameraPreviewControllerDelegate {
     func cameraPreview(_ controller: CameraPreviewController, willFocusInto locationInView: CGPoint, tappedLocationInImage locationInImage: CGPoint) {
         logi("Focusing location in view: \(locationInView)")
         logi("Focusing location(ratio) in image: \(locationInImage)")
+    }
+    func cameraPreview(_ controller: CameraPreviewController, willOutputGIF gifURL: URL?) {
+        guard let gifURL = gifURL else {
+            logw("Failed to create GIF file.")
+            return
+        }
+        do {
+            let gifData = try Data(contentsOf: gifURL)
+            if let image = UIImage(data: gifData) {
+                UIImageWriteToSavedPhotosAlbum(image, self, #selector(finishedWriteImageToSavedPhotosAlbum), nil)
+            }
+        } catch {
+            loge("\(error.localizedDescription)")
+        }
+    }
+    
+    func finishedWriteImageToSavedPhotosAlbum(image: UIImage, didFinishSavingWithError error: NSError?, contextInfo: UnsafeRawPointer) {
+        if let error = error {
+            logi("Failed to save GIF image to photos album with error: \(error)")
+        } else {
+            logi("Successfully saved GIF image to photos album.")
+        }
     }
 }
 
