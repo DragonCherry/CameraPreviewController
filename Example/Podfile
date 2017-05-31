@@ -4,7 +4,7 @@ target 'CameraPreviewController_Example' do
   pod 'CameraPreviewController', :path => '../'
   pod 'TinyLog'
   pod 'GPUImage'
-  pod 'AttachLayout'
+  pod 'PureLayout'
   pod 'SwiftARGB'
 end
 

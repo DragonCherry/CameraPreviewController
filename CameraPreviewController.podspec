@@ -38,5 +38,5 @@ Pod::Spec.new do |s|
   # s.frameworks = 'UIKit', 'MapKit'
   s.dependency 'TinyLog'
   s.dependency 'GPUImage'
-  s.dependency 'AttachLayout'
+  s.dependency 'PureLayout'
 end
