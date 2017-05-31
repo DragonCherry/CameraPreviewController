@@ -8,7 +8,7 @@
 
 import UIKit
 import TinyLog
-import AttachLayout
+import PureLayout
 import GPUImage
 
 // MARK: - Declaration for CameraPreviewControllerDelegate
@@ -20,7 +20,6 @@ public protocol CameraPreviewControllerDelegate: class {
 // MARK: - Declaration for CameraPreviewControllerLayoutSource
 public protocol CameraPreviewControllerLayoutSource: class {
     func cameraPreviewNeedsLayout(_ controller: CameraPreviewController, preview: GPUImageView)
-    func cameraPreviewNeedsFillMode(_ controller: CameraPreviewController) -> Bool
 }
 
 // MARK: - Declaration for CameraPreviewControllerFaceDetectionDelegate
@@ -36,18 +35,22 @@ open class CameraPreviewController: UIViewController {
     open weak var layoutSource: CameraPreviewControllerLayoutSource?
     open weak var faceDetectionDelegate: CameraPreviewControllerFaceDetectionDelegate?
     
+    // MARK: Layout
+    fileprivate var didSetupConstraints = false
+    fileprivate var customConstraints = false
+    
     // MARK: Common Properties
     open var cameraPosition: AVCaptureDevicePosition = .front
     open var capturePreset: String = AVCaptureSessionPresetHigh
     open var captureSequence: UInt64 = 0
-    private var _resolution: CGSize = .zero
-    open var resolution: CGSize {
-        get { return _resolution }
-        set { _resolution = newValue }
-    }
+    open var fillMode: GPUImageFillModeType = kGPUImageFillModePreserveAspectRatioAndFill
+    open var resolution: CGSize = .zero
     
     fileprivate var camera: GPUImageStillCamera!
-    fileprivate var preview: GPUImageView!
+    fileprivate var preview: GPUImageView = {
+        let view = GPUImageView.newAutoLayout()
+        return view
+    }()
     
     // MARK: Filter
     /** Default filter for capturing still image, and this is recommeded by BradLarson in https://github.com/BradLarson/GPUImage/issues/1874 */
@@ -75,24 +78,24 @@ open class CameraPreviewController: UIViewController {
     open var faceDetectFrequency: UInt = 30
     
     // MARK: Tap to Focus
-    open var isTapToFocusEnabled: Bool = true {
+    open var isTapFocusingEnabled: Bool = true {
         didSet {
-            if isTapToFocusEnabled {
-                initTapToFocusGesture()
+            if isTapFocusingEnabled {
+                setupTapFocusing()
             } else {
-                deinitTapToFocusGesture()
+                clearTapFocusing()
             }
         }
     }
-    fileprivate var tapToFocusGesture: UITapGestureRecognizer?
+    fileprivate var tapFocusingRecognizer: UITapGestureRecognizer?
     
     // MARK: Pinch to Zoom
-    open var isPinchToZoomEnabled: Bool = true {
+    open var isPinchZoomingEnabled: Bool = true {
         didSet {
-            if isPinchToZoomEnabled {
-                initPinchToZoomGesture()
+            if isPinchZoomingEnabled {
+                setupPinchZooming()
             } else {
-                deinitPinchToZoomGesture()
+                clearPinchZooming()
             }
         }
     }
@@ -100,11 +103,18 @@ open class CameraPreviewController: UIViewController {
     fileprivate var pivotPinchScale: CGFloat = 1
     
     // MARK: - Lifecycle for UIViewController
+    override open func loadView() {
+        super.loadView()
+        view = UIView()
+        view.backgroundColor = .white
+    }
+    
     override open func viewDidLoad() {
         super.viewDidLoad()
-        initPreview()
-        initCamera()
+        setupPreview()
+        setupCamera()
         startCapture()
+        view.setNeedsUpdateConstraints()
     }
     
     override open func viewWillDisappear(_ animated: Bool) {
@@ -115,32 +125,41 @@ open class CameraPreviewController: UIViewController {
         super.viewDidDisappear(animated)
     }
     
+    override open func updateViewConstraints() {
+        if !didSetupConstraints {
+            if !customConstraints {
+                preview.autoPinEdgesToSuperviewEdges()
+            }
+            didSetupConstraints = true
+        }
+        super.updateViewConstraints()
+    }
+    
     override open func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
     }
     
     deinit {
-        deinitTapToFocusGesture()
-        deinitCamera()
+        clearTapFocusing()
+        clearCamera()
     }
 }
 
 // MARK: - Lifecycle APIs
 extension CameraPreviewController: UIGestureRecognizerDelegate {
     
-    open func initPreview() {
-        if preview == nil {
-            preview = GPUImageView()
-            layoutSource?.cameraPreviewNeedsLayout(self, preview: preview)
-            if preview.superview == nil {
-                _ = view.attachFilling(preview)
-            }
+    open func setupPreview() {
+        
+        // layout
+        layoutSource?.cameraPreviewNeedsLayout(self, preview: preview)
+        if let _ = preview.superview {
+            customConstraints = true
+        } else {
+            view.addSubview(preview)
         }
         
         // config fill mode
-        if let prefersFillMode = layoutSource?.cameraPreviewNeedsFillMode(self), prefersFillMode {
-            preview.fillMode = kGPUImageFillModePreserveAspectRatioAndFill
-        }
+        preview.fillMode = fillMode
         
         // transform preview by camera position
         switch cameraPosition {
@@ -151,18 +170,18 @@ extension CameraPreviewController: UIGestureRecognizerDelegate {
         }
         
         // tap to focus
-        if isTapToFocusEnabled {
-            initTapToFocusGesture()
+        if isTapFocusingEnabled {
+            setupTapFocusing()
         }
         
         // pinch to zoom
-        if isPinchToZoomEnabled {
-            initPinchToZoomGesture()
+        if isPinchZoomingEnabled {
+            setupPinchZooming()
         }
     }
     
-    open func initCamera() {
-        deinitCamera()
+    open func setupCamera() {
+        clearCamera()
         camera = GPUImageStillCamera(sessionPreset: capturePreset, cameraPosition: cameraPosition)
         switch cameraPosition {
         case .back:
@@ -183,7 +202,7 @@ extension CameraPreviewController: UIGestureRecognizerDelegate {
             cameraPosition = .back
         }
         camera.rotateCamera()
-        initPreview()
+        setupPreview()
     }
     
     open func pauseCapture() {
@@ -206,7 +225,7 @@ extension CameraPreviewController: UIGestureRecognizerDelegate {
         }
     }
     
-    open func deinitCamera() {
+    open func clearCamera() {
         if let camera = self.camera {
             if camera.captureSession.isRunning {
                 camera.stopCapture()
@@ -240,34 +259,33 @@ extension CameraPreviewController {
 // MARK: - Tap to Focus
 extension CameraPreviewController {
     
-    open func initTapToFocusGesture() {
-        deinitTapToFocusGesture()
-        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(tappedCameraPreview))
-        tapGesture.numberOfTapsRequired = 1
-        tapGesture.numberOfTouchesRequired = 1
-        tapGesture.delegate = self
-        preview.addGestureRecognizer(tapGesture)
-        self.tapToFocusGesture = tapGesture
+    open func setupTapFocusing() {
+        clearTapFocusing()
+        let recognizer = UITapGestureRecognizer(target: self, action: #selector(tappedCameraPreview))
+        recognizer.numberOfTapsRequired = 1
+        recognizer.numberOfTouchesRequired = 1
+        recognizer.delegate = self
+        preview.addGestureRecognizer(recognizer)
+        self.tapFocusingRecognizer = recognizer
     }
     
-    open func deinitTapToFocusGesture() {
-        if let tapGesture = self.tapToFocusGesture {
-            tapGesture.removeTarget(self, action: #selector(tappedCameraPreview))
-            preview.removeGestureRecognizer(tapGesture)
-            self.tapToFocusGesture = nil
+    open func clearTapFocusing() {
+        if let recognizer = self.tapFocusingRecognizer {
+            recognizer.removeTarget(self, action: #selector(tappedCameraPreview))
+            preview.removeGestureRecognizer(recognizer)
+            self.tapFocusingRecognizer = nil
         }
     }
     
     open func tappedCameraPreview(gesture: UITapGestureRecognizer) {
-        logi("User tapped camera preview.")
         guard resolution != .zero else {
             logw("Cannot convert and locate point to focus into since resolution for current image is not ready yet.")
             return
         }
         let point = gesture.location(in: preview)
         
-        let scaleX = point.x / preview.width
-        let scaleY = point.y / preview.height
+        let scaleX = point.x / preview.bounds.width
+        let scaleY = point.y / preview.bounds.height
         
         if camera.inputCamera.isFocusPointOfInterestSupported {
             lockForConfiguration({ (device, locked) in
@@ -285,7 +303,7 @@ extension CameraPreviewController {
                 default:
                     self.delegate?.cameraPreview(
                         self,
-                        willFocusInto: CGPoint(x: self.preview.width - point.x, y: point.y),
+                        willFocusInto: CGPoint(x: self.preview.bounds.width - point.x, y: point.y),
                         tappedLocationInImage: CGPoint(x: 1 - locationInImage.x, y: point.y)
                     )
                 }
@@ -297,19 +315,19 @@ extension CameraPreviewController {
 // MARK: - Pinch to Zoom
 extension CameraPreviewController {
     
-    open func initPinchToZoomGesture() {
-        deinitPinchToZoomGesture()
+    open func setupPinchZooming() {
+        clearPinchZooming()
         let pinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(pinchedCameraPreview))
         pinchGesture.delegate = self
         preview.addGestureRecognizer(pinchGesture)
         self.pinchToZoomGesture = pinchGesture
     }
     
-    open func deinitPinchToZoomGesture() {
+    open func clearPinchZooming() {
         if let pinchGesture = self.pinchToZoomGesture {
             pinchGesture.removeTarget(self, action: #selector(pinchedCameraPreview))
             preview.removeGestureRecognizer(pinchGesture)
-            self.tapToFocusGesture = nil
+            self.tapFocusingRecognizer = nil
         }
     }
     
@@ -600,7 +618,7 @@ extension CameraPreviewController {
             faceFrame.size.width *= widthScaleBy
             faceFrame.size.height *= heightScaleBy
             
-            faceFrame = faceFrame.offsetBy(dx: preview.origin.x, dy: preview.origin.y)
+            faceFrame = faceFrame.offsetBy(dx: preview.frame.origin.x, dy: preview.frame.origin.y)
             
             var faceView: UIView!
             
@@ -636,7 +654,7 @@ extension CameraPreviewController: GPUImageVideoCameraDelegate {
                 if let faceFeature = feature as? CIFaceFeature {
                     faceFeatures.append(faceFeature)
                 } else {
-                    print("CIFeature object is not a kind of CIFaceFeature.")
+                    logw("CIFeature object is not a kind of CIFaceFeature.")
                 }
             }
             if faceFeatures.count > 0 {

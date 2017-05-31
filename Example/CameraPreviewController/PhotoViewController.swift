@@ -8,29 +8,47 @@
 
 import UIKit
 import TinyLog
-import AttachLayout
+import PureLayout
 
 class PhotoViewController: UIViewController {
     
     public var image: UIImage?
     
-    private var imageView: UIImageView!
-    private var btnClose: UIButton!
+    private var didSetupConstraints: Bool = false
+    private var imageView: UIImageView = {
+        let view = UIImageView.newAutoLayout()
+        view.contentMode = .scaleAspectFill
+        return view
+    }()
+    private lazy var closeButton: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Close", for: .normal)
+        button.setTitleColor(.black, for: .normal)
+        button.addTarget(self, action: #selector(pressedClose(sender:)), for: .touchUpInside)
+        return button
+    }()
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        btnClose = UIButton(size: CGSize(width: 50, height: 40), title: "Close", textSize: 10, textColor: .black, backgroundColor: .white, target: self, selector: #selector(pressedClose))
-        imageView = UIImageView()
-        imageView.contentMode = .scaleAspectFill
+        view.addSubview(imageView)
+        view.addSubview(closeButton)
         imageView.image = self.image
-        
-        _ = view.attachFilling(imageView)
-        _ = view.attach(btnClose, at: .topRight, insets: UIEdgeInsets(top: 40, left: 0, bottom: 0, right: 20))
+    }
+    
+    override func updateViewConstraints() {
+        if !didSetupConstraints {
+            imageView.autoPinEdgesToSuperviewEdges()
+            closeButton.autoSetDimensions(to: CGSize(width: 50, height: 40))
+            closeButton.autoPinEdge(toSuperviewEdge: .trailing, withInset: 20)
+            closeButton.autoPinEdge(toSuperviewEdge: .top, withInset: 40)
+            didSetupConstraints = true
+        }
+        super.updateViewConstraints()
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        btnClose.showBorder()
+        closeButton.showBorder()
     }
 
     override func didReceiveMemoryWarning() {

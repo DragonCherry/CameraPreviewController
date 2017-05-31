@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'CameraPreviewController'
-  s.version          = '1.3.0'
+  s.version          = '1.3.1'
   s.summary          = 'Basic camera preview controller based on GPUImage library inside.'
 
 # This description is used to generate tags and improve search results.
@@ -38,5 +38,5 @@ Pod::Spec.new do |s|
   # s.frameworks = 'UIKit', 'MapKit'
   s.dependency 'TinyLog'
   s.dependency 'GPUImage'
-  s.dependency 'AttachLayout'
+  s.dependency 'PureLayout'
 end

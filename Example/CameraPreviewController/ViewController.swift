@@ -8,7 +8,6 @@
 
 import UIKit
 import GPUImage
-import AttachLayout
 import SwiftARGB
 import CameraPreviewController
 import TinyLog
@@ -22,17 +21,74 @@ extension UIView {
 
 class ViewController: CameraPreviewController {
     
+    let buttonHeight: CGFloat = 40
+    let textSize: CGFloat = 10
+    let bgColor: UIColor = UIColor(rgbHex: 0xEEEEFF)
+    let recognitionColor: UIColor = UIColor(rgbHex: 0xEEFFEE)
+    let effectColor: UIColor = UIColor(rgbHex: 0xFFEEEE)
+    let textColor: UIColor = .black
+    
+    var didSetupConstraints = false
+    
     // Buttons for basic functionalities
-    var btnToggleCamera: UIButton!
-    var btnToggleFlash: UIButton!
-    var btnTakePhoto: UIButton!
+    lazy var btnToggleCamera: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Toggle Camera", for: .normal)
+        button.backgroundColor = self.bgColor
+        button.setTitleColor(self.textColor, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
+        button.addTarget(self, action: #selector(self.pressedToggleCamera), for: .touchUpInside)
+        return button
+    }()
+    lazy var btnToggleFlash: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Toggle Flash", for: .normal)
+        button.backgroundColor = self.bgColor
+        button.setTitleColor(self.textColor, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
+        button.addTarget(self, action: #selector(self.pressedToggleFlash), for: .touchUpInside)
+        return button
+    }()
+    lazy var btnTakePhoto: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Take Photo", for: .normal)
+        button.backgroundColor = self.bgColor
+        button.setTitleColor(self.textColor, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
+        button.addTarget(self, action: #selector(self.pressedTakePhoto), for: .touchUpInside)
+        return button
+    }()
     
     // Buttons for recognization functionalities
-    var btnToggleDetectFace: UIButton!
+    lazy var btnToggleDetectFace: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Enable Face Detection", for: .normal)
+        button.backgroundColor = self.recognitionColor
+        button.setTitleColor(self.textColor, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
+        button.addTarget(self, action: #selector(self.pressedToggleDetectFace), for: .touchUpInside)
+        return button
+    }()
     
     // Buttons for effect functionalities
-    var btnAddFilter: UIButton!
-    var btnClearFilters: UIButton!
+    lazy var btnAddFilter: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Add Filter", for: .normal)
+        button.backgroundColor = self.effectColor
+        button.setTitleColor(self.textColor, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
+        button.addTarget(self, action: #selector(self.pressedAddFilter), for: .touchUpInside)
+        return button
+    }()
+    lazy var btnClearFilters: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Clear Filters", for: .normal)
+        button.backgroundColor = self.effectColor
+        button.setTitleColor(self.textColor, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
+        button.addTarget(self, action: #selector(self.pressedClearFilters), for: .touchUpInside)
+        return button
+    }()
     
     override func loadView() {
         super.loadView()
@@ -47,34 +103,55 @@ class ViewController: CameraPreviewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let height: CGFloat = 40
-        let textSize: CGFloat = 10
-        let basicColor: UIColor = UIColor(rgbHex: 0xEEEEFF)
-        let recognitionColor: UIColor = UIColor(rgbHex: 0xEEFFEE)
-        let effectColor: UIColor = UIColor(rgbHex: 0xFFEEEE)
-        let textColor: UIColor = .black
+        // add your views
+        view.addSubview(btnAddFilter)
+        view.addSubview(btnClearFilters)
+        view.addSubview(btnToggleDetectFace)
+        view.addSubview(btnToggleCamera)
+        view.addSubview(btnToggleFlash)
+        view.addSubview(btnTakePhoto)
+    }
+    
+    override func updateViewConstraints() {
         
-        // Buttons for basic functionalities
-        btnToggleCamera = UIButton(height: height, title: "Toggle Camera", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedToggleCamera))
-        btnToggleFlash = UIButton(height: height, title: "Toggle Flash", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedToggleFlash))
-        btnTakePhoto = UIButton(height: height, title: "Take Photo", textSize: textSize, textColor: textColor, backgroundColor: basicColor, target: self, selector: #selector(pressedTakePhoto))
-        
-        // Buttons for recognization functionalities
-        btnToggleDetectFace = UIButton(height: height, title: "Enable Face Detection", textSize: textSize, textColor: textColor, backgroundColor: recognitionColor, target: self, selector: #selector(pressedToggleDetect))
-        
-        // Buttons for effect functionalities
-        btnAddFilter = UIButton(height: height, title: "Add Filter", textSize: textSize, textColor: textColor, backgroundColor: effectColor, target: self, selector: #selector(pressedAddFilter))
-        btnClearFilters = UIButton(height: height, title: "Clear Filters", textSize: textSize, textColor: textColor, backgroundColor: effectColor, target: self, selector: #selector(pressedClearFilters))
-        
-        // auto layout
-        _ = view.attach(btnAddFilter, at: .bottomLeft, widthMultiplier: 1/2)
-        _ = view.attach(btnClearFilters, on: .right, of: btnAddFilter, widthMultiplier: 1/2)
-        
-        _ = view.attach(btnToggleDetectFace, on: .top, of: btnAddFilter, widthMultiplier: 0)
-        
-        _ = view.attach(btnToggleCamera, on: .top, of: btnToggleDetectFace, widthMultiplier: 1/3)
-        _ = view.attach(btnToggleFlash, on: .right, of: btnToggleCamera, widthMultiplier: 1/3)
-        _ = view.attach(btnTakePhoto, on: .right, of: btnToggleFlash, widthMultiplier: 0)
+        if !didSetupConstraints {
+            
+            /* Filter */
+            btnAddFilter.autoSetDimension(.height, toSize: buttonHeight)
+            btnAddFilter.autoMatch(.width, to: .width, of: view, withMultiplier: 1/2)
+            btnAddFilter.autoPinEdge(toSuperviewEdge: .leading)
+            btnAddFilter.autoPinEdge(toSuperviewEdge: .bottom)
+            
+            btnClearFilters.autoSetDimension(.height, toSize: buttonHeight)
+            btnClearFilters.autoMatch(.width, to: .width, of: view, withMultiplier: 1/2)
+            btnClearFilters.autoPinEdge(toSuperviewEdge: .trailing)
+            btnClearFilters.autoPinEdge(toSuperviewEdge: .bottom)
+            
+            /* Face Detection */
+            btnToggleDetectFace.autoSetDimension(.height, toSize: buttonHeight)
+            btnToggleDetectFace.autoPinEdge(toSuperviewEdge: .leading)
+            btnToggleDetectFace.autoPinEdge(toSuperviewEdge: .trailing)
+            btnToggleDetectFace.autoPinEdge(.bottom, to: .top, of: btnAddFilter)
+            
+            /* Basic */
+            btnToggleCamera.autoSetDimension(.height, toSize: buttonHeight)
+            btnToggleCamera.autoMatch(.width, to: .width, of: view, withMultiplier: 1/3)
+            btnToggleCamera.autoPinEdge(toSuperviewEdge: .leading)
+            btnToggleCamera.autoPinEdge(.bottom, to: .top, of: btnToggleDetectFace)
+
+            btnToggleFlash.autoSetDimension(.height, toSize: buttonHeight)
+            btnToggleFlash.autoMatch(.width, to: .width, of: view, withMultiplier: 1/3)
+            btnToggleFlash.autoPinEdge(.leading, to: .trailing, of: btnToggleCamera)
+            btnToggleFlash.autoPinEdge(.bottom, to: .top, of: btnToggleDetectFace)
+            
+            btnTakePhoto.autoSetDimension(.height, toSize: buttonHeight)
+            btnTakePhoto.autoMatch(.width, to: .width, of: view, withMultiplier: 1/3)
+            btnTakePhoto.autoPinEdge(.bottom, to: .top, of: btnToggleDetectFace)
+            btnTakePhoto.autoPinEdge(.leading, to: .trailing, of: btnToggleFlash)
+            
+            didSetupConstraints = true
+        }
+        super.updateViewConstraints()
     }
     
     override func viewDidLayoutSubviews() {
@@ -122,7 +199,7 @@ extension ViewController {
         }
     }
     
-    public func pressedToggleDetect(sender: UIButton) {
+    public func pressedToggleDetectFace(sender: UIButton) {
         isFaceDetectorEnabled = !isFaceDetectorEnabled
         if isFaceDetectorEnabled {
             faceDetectFrequency = 10
@@ -156,10 +233,9 @@ extension ViewController: CameraPreviewControllerDelegate {
 // MARK: - Implementation for CameraPreviewControllerLayoutSource
 extension ViewController: CameraPreviewControllerLayoutSource {
     func cameraPreviewNeedsLayout(_ controller: CameraPreviewController, preview: GPUImageView) {
-        _ = view.attachFilling(preview, insets: UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0))
-    }
-    func cameraPreviewNeedsFillMode(_ controller: CameraPreviewController) -> Bool {
-        return true     // false to aspect fit mode
+        view.addSubview(preview)
+        preview.autoPinEdgesToSuperviewEdges(with: .zero, excludingEdge: .bottom)
+        preview.autoPinEdge(toSuperviewEdge: .bottom, withInset: buttonHeight * 3)
     }
 }
 
