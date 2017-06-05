@@ -13,6 +13,7 @@ import GPUImage
 
 // MARK: - Declaration for CameraPreviewControllerDelegate
 public protocol CameraPreviewControllerDelegate: class {
+    func cameraPreview(_ controller: CameraPreviewController, didSaveVideoAt url: URL)
     func cameraPreview(_ controller: CameraPreviewController, willOutput sampleBuffer: CMSampleBuffer, with sequence: UInt64)
     func cameraPreview(_ controller: CameraPreviewController, willFocusInto tappedLocationInView: CGPoint, tappedLocationInImage: CGPoint)
 }
@@ -47,16 +48,24 @@ open class CameraPreviewController: UIViewController {
     open var resolution: CGSize = .zero
     
     fileprivate var camera: GPUImageStillCamera!
-    fileprivate var preview: GPUImageView = {
-        let view = GPUImageView.newAutoLayout()
-        return view
-    }()
+    fileprivate let preview: GPUImageView = { return GPUImageView.newAutoLayout() }()
     
     // MARK: Filter
     /** Default filter for capturing still image, and this is recommeded by BradLarson in https://github.com/BradLarson/GPUImage/issues/1874 */
     fileprivate var defaultFilter: GPUImageFilter! = GPUImageFilter()
     fileprivate var filters = [GPUImageFilter]()
-    fileprivate var lastFilter: GPUImageOutput? { return filters.last }
+    fileprivate var lastFilter: GPUImageOutput { return filters.last ?? defaultFilter }
+    
+    // MARK: Video
+    fileprivate var videoWriter: GPUImageMovieWriter?
+    fileprivate var videoUrl: URL?
+    open var isRecordingVideo: Bool {
+        if let videoWriter = self.videoWriter, let _ = self.videoUrl, !videoWriter.isPaused {
+            return true
+        } else {
+            return false
+        }
+    }
     
     // MARK: Face Detection
     fileprivate var faceDetector: CIDetector?
@@ -140,6 +149,7 @@ open class CameraPreviewController: UIViewController {
     }
     
     deinit {
+        logd("Released \(type(of: self)).")
         clearTapFocusing()
         clearCamera()
     }
@@ -435,12 +445,6 @@ extension CameraPreviewController {
     }
     
     open func takePhoto(_ completion: ((UIImage?) -> Void)?) {
-        var filterToCapture: GPUImageOutput!
-        if let lastFilter = self.lastFilter {
-            filterToCapture = lastFilter
-        } else {
-            filterToCapture = defaultFilter
-        }
         var imageOrientation: UIImageOrientation!
         switch cameraPosition {
         case .back:
@@ -448,9 +452,61 @@ extension CameraPreviewController {
         default:
             imageOrientation = .upMirrored
         }
-        camera.capturePhotoAsImageProcessedUp(toFilter: filterToCapture, with: imageOrientation) { (image, error) in
+        camera.capturePhotoAsImageProcessedUp(toFilter: lastFilter, with: imageOrientation) { (image, error) in
             completion?(image)
         }
+    }
+    
+    open func startRecording() {
+        if !isRecordingVideo {
+            guard let formatDescription = camera.inputCamera.activeFormat.formatDescription else {
+                return
+            }
+            let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
+            
+            let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("\(UUID().uuidString).m4v")
+            let url = URL(fileURLWithPath: path)
+            
+            if let writer = GPUImageMovieWriter(movieURL: url, size: CGSize(width: CGFloat(dimensions.height), height: CGFloat(dimensions.width))) {
+                lastFilter.addTarget(writer)
+                self.videoWriter = writer
+                self.videoUrl = url
+                writer.delegate = self
+                writer.startRecording()
+                logi("Recording video with size: \(dimensions.width)x\(dimensions.height)")
+            }
+        }
+    }
+    
+    open func finishRecording() {
+        if isRecordingVideo {
+            if let writer = self.videoWriter {
+                writer.finishRecording()
+                lastFilter.removeTarget(writer)
+            } else {
+                logc("Invalid status error.")
+            }
+        }
+    }
+    
+    fileprivate func clearRecording() {
+        self.videoWriter = nil
+        self.videoUrl = nil
+    }
+}
+
+// MARK: - GPUImageMovieWriterDelegate
+extension CameraPreviewController: GPUImageMovieWriterDelegate {
+    
+    public func movieRecordingCompleted() {
+        if let videoUrl = self.videoUrl {
+            clearRecording()
+            delegate?.cameraPreview(self, didSaveVideoAt: videoUrl)
+        }
+    }
+    
+    public func movieRecordingFailedWithError(_ error: Error!) {
+        logi("\(error?.localizedDescription ?? "")")
     }
 }
 
@@ -470,27 +526,23 @@ extension CameraPreviewController {
     
     open func add(filter: GPUImageFilter?) {
         guard let filter = filter, !contains(targetFilter: filter) else { return }
-        if let lastFilter = self.lastFilter {
-            lastFilter.removeAllTargets()
-            lastFilter.addTarget(filter)
-        } else {
-            defaultFilter.removeAllTargets()
-            defaultFilter.addTarget(filter)
-        }
+        lastFilter.removeAllTargets()
+        lastFilter.addTarget(filter)
         filter.addTarget(preview)
+        if let videoWriter = self.videoWriter {
+            filter.addTarget(videoWriter)
+        }
         filters.append(filter)
     }
     
     open func add(newFilters: [GPUImageFilter]?) {
         guard let newFilters = newFilters, let firstNewFilter = newFilters.first, newFilters.count > 0 else { return }
-        if let lastFilter = self.lastFilter {
-            lastFilter.removeAllTargets()
-            lastFilter.addTarget(firstNewFilter)
-        } else {
-            defaultFilter.removeAllTargets()
-            defaultFilter.addTarget(firstNewFilter)
-        }
+        lastFilter.removeAllTargets()
+        lastFilter.addTarget(firstNewFilter)
         filters.append(contentsOf: filters)
+        if let videoWriter = self.videoWriter {
+            filters.last?.addTarget(videoWriter)
+        }
         filters.last?.addTarget(preview)
     }
     
@@ -501,6 +553,9 @@ extension CameraPreviewController {
             filter.removeFramebuffer()
         }
         filters.removeAll()
+        if let videoWriter = self.videoWriter {
+            defaultFilter.addTarget(videoWriter)
+        }
         defaultFilter.addTarget(preview)
     }
 }
