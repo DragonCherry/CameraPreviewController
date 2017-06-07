@@ -110,9 +110,9 @@ Xcode8, Swift 3
 
 ## Dependency
 
-Sample: TinyLog, GPUImage, AttachLayout, SwiftARGB
+Sample: TinyLog, GPUImage, PureLayout, SwiftARGB, Dimmer
 
-Pods: TinyLog, GPUImage, AttachLayout
+Pods: TinyLog, GPUImage, PureLayout
 
 ## Installation
 
