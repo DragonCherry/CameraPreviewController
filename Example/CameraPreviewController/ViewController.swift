@@ -185,11 +185,12 @@ class ViewController: CameraPreviewController {
 extension ViewController {
     
     public func pressedTakeVideo(sender: UIButton) {
+        sender.isEnabled = false
         if isRecordingVideo {
-            finishRecording()
+            finishRecordingVideo()
             sender.setTitle("Take Video", for: .normal)
         } else {
-            startRecording()
+            startRecordingVideo()
             sender.setTitle("Finish Recording", for: .normal)
         }
     }
@@ -257,6 +258,10 @@ extension ViewController: CameraPreviewControllerDelegate {
         }
     }
     
+    func cameraPreview(_ controller: CameraPreviewController, didFailSaveVideoWithError error: Error) {
+        btnTakeVideo.isEnabled = true
+    }
+    
     func cameraPreview(_ controller: CameraPreviewController, willOutput sampleBuffer: CMSampleBuffer, with sequence: UInt64) {
         
     }
@@ -274,6 +279,8 @@ extension ViewController {
         } else {
             logi("Successfully saved a video file in Photo Library: \(videoPath)")
         }
+        btnTakeVideo.setTitle("Take Video", for: .normal)
+        btnTakeVideo.isEnabled = true
     }
 }
 
