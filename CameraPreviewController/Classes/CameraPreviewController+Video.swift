@@ -48,6 +48,10 @@ extension CameraPreviewController {
                         break
                     }
                     
+                    if self.cameraPosition == .front, orientation.isLandscape {
+                        transform = transform?.scaledBy(x: -1, y: 1)
+                    }
+                    
                     DispatchQueue.main.async {
                         if let transform = transform {
                             writer.startRecording(inOrientation: transform)
@@ -91,7 +95,9 @@ extension CameraPreviewController: GPUImageMovieWriterDelegate {
     public func movieRecordingCompleted() {
         if let videoUrl = self.videoUrl, isRecordingVideo {
             clearRecordingVideo()
-            delegate?.cameraPreview(self, didSaveVideoAt: videoUrl)
+            DispatchQueue.main.async {
+                self.delegate?.cameraPreview(self, didSaveVideoAt: videoUrl)
+            }
         }
     }
     
@@ -99,7 +105,9 @@ extension CameraPreviewController: GPUImageMovieWriterDelegate {
         logi("\(error?.localizedDescription ?? "")")
         if isRecordingVideo {
             clearRecordingVideo()
-            delegate?.cameraPreview(self, didFailSaveVideoWithError: error)
+            DispatchQueue.main.async {
+                self.delegate?.cameraPreview(self, didFailSaveVideoWithError: error)
+            }
         }
     }
 }

@@ -11,6 +11,7 @@ import GPUImage
 import SwiftARGB
 import CameraPreviewController
 import TinyLog
+import Dimmer
 
 extension UIView {
     func showBorder() {
@@ -185,14 +186,14 @@ class ViewController: CameraPreviewController {
 extension ViewController {
     
     public func pressedTakeVideo(sender: UIButton) {
-        sender.isEnabled = false
+        sender.showLoading()
         if isRecordingVideo {
             finishRecordingVideo(completion: {
                 sender.setTitle("Take Video", for: .normal)
             })
         } else {
             startRecordingVideo(completion: {
-                sender.isEnabled = true
+                sender.hideLoading()
                 sender.setTitle("Finish Recording", for: .normal)
             })
         }
@@ -262,12 +263,13 @@ extension ViewController: CameraPreviewControllerDelegate {
     }
     
     func cameraPreview(_ controller: CameraPreviewController, didFailSaveVideoWithError error: Error) {
-        btnTakeVideo.isEnabled = true
+        btnTakeVideo.hideLoading()
     }
     
     func cameraPreview(_ controller: CameraPreviewController, willOutput sampleBuffer: CMSampleBuffer, with sequence: UInt64) {
         
     }
+    
     func cameraPreview(_ controller: CameraPreviewController, willFocusInto locationInView: CGPoint, tappedLocationInImage locationInImage: CGPoint) {
         logi("Focusing location in view: \(locationInView)")
         logi("Focusing location(ratio) in image: \(locationInImage)")
@@ -282,8 +284,10 @@ extension ViewController {
         } else {
             logi("Successfully saved a video file in Photo Library: \(videoPath)")
         }
-        btnTakeVideo.setTitle("Take Video", for: .normal)
-        btnTakeVideo.isEnabled = true
+        DispatchQueue.main.async {
+            self.btnTakeVideo.setTitle("Take Video", for: .normal)
+            self.btnTakeVideo.hideLoading()
+        }
     }
 }
 
