@@ -187,11 +187,14 @@ extension ViewController {
     public func pressedTakeVideo(sender: UIButton) {
         sender.isEnabled = false
         if isRecordingVideo {
-            finishRecordingVideo()
-            sender.setTitle("Take Video", for: .normal)
+            finishRecordingVideo(completion: {
+                sender.setTitle("Take Video", for: .normal)
+            })
         } else {
-            startRecordingVideo()
-            sender.setTitle("Finish Recording", for: .normal)
+            startRecordingVideo(completion: {
+                sender.isEnabled = true
+                sender.setTitle("Finish Recording", for: .normal)
+            })
         }
     }
     

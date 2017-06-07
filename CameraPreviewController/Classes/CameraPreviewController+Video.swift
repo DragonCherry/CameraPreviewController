@@ -12,7 +12,7 @@ import GPUImage
 
 extension CameraPreviewController {
     
-    open func startRecordingVideo() {
+    open func startRecordingVideo(completion: (() -> Void)? = nil) {
         
         if !isRecordingVideo {
             
@@ -48,23 +48,31 @@ extension CameraPreviewController {
                         break
                     }
                     
-                    if let transform = transform {
-                        writer.startRecording(inOrientation: transform)
-                    } else {
-                        writer.startRecording()
+                    DispatchQueue.main.async {
+                        if let transform = transform {
+                            writer.startRecording(inOrientation: transform)
+                        } else {
+                            writer.startRecording()
+                        }
+                        logi("Recording video with size: \(videoWidth)x\(videoHeight)")
+                        completion?()
                     }
-                    
-                    logi("Recording video with size: \(videoWidth)x\(videoHeight)")
                 }
             })
         }
     }
     
-    open func finishRecordingVideo() {
+    open func finishRecordingVideo(completion: (() -> Void)? = nil) {
         if isRecordingVideo {
             if let writer = self.videoWriter {
-                writer.finishRecording()
-                lastFilter.removeTarget(writer)
+                DispatchQueue.main.async {
+                    if let completion = completion {
+                        writer.finishRecording(completionHandler: completion)
+                    } else {
+                        writer.finishRecording()
+                    }
+                    self.lastFilter.removeTarget(writer)
+                }
             } else {
                 logc("Invalid status error.")
             }
