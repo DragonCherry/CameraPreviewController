@@ -13,9 +13,9 @@ I'm writing this since I couldn't find a open source with complete basic source 
 
 This example contains the following features.
 
-1) front camera preview / still capture
+1) front camera preview / still capture / video capture
 
-2) back camera preview / still capture
+2) back camera preview / still capture / video capture
 
 3) flipping camera
 

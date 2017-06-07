@@ -6,6 +6,7 @@ target 'CameraPreviewController_Example' do
   pod 'GPUImage'
   pod 'PureLayout'
   pod 'SwiftARGB'
+  pod 'Dimmer'
 end
 
 post_install do |installer|

@@ -11,6 +11,7 @@ import GPUImage
 import SwiftARGB
 import CameraPreviewController
 import TinyLog
+import Dimmer
 
 extension UIView {
     func showBorder() {
@@ -56,6 +57,15 @@ class ViewController: CameraPreviewController {
         button.setTitleColor(self.textColor, for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
         button.addTarget(self, action: #selector(self.pressedTakePhoto), for: .touchUpInside)
+        return button
+    }()
+    lazy var btnTakeVideo: UIButton = {
+        let button = UIButton.newAutoLayout()
+        button.setTitle("Take Video", for: .normal)
+        button.backgroundColor = self.bgColor
+        button.setTitleColor(self.textColor, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: self.textSize)
+        button.addTarget(self, action: #selector(self.pressedTakeVideo), for: .touchUpInside)
         return button
     }()
     
@@ -110,6 +120,7 @@ class ViewController: CameraPreviewController {
         view.addSubview(btnToggleCamera)
         view.addSubview(btnToggleFlash)
         view.addSubview(btnTakePhoto)
+        view.addSubview(btnTakeVideo)
     }
     
     override func updateViewConstraints() {
@@ -134,20 +145,26 @@ class ViewController: CameraPreviewController {
             btnToggleDetectFace.autoPinEdge(.bottom, to: .top, of: btnAddFilter)
             
             /* Basic */
+            let btnBasicCount: CGFloat = 4
             btnToggleCamera.autoSetDimension(.height, toSize: buttonHeight)
-            btnToggleCamera.autoMatch(.width, to: .width, of: view, withMultiplier: 1/3)
+            btnToggleCamera.autoMatch(.width, to: .width, of: view, withMultiplier: 1/btnBasicCount)
             btnToggleCamera.autoPinEdge(toSuperviewEdge: .leading)
             btnToggleCamera.autoPinEdge(.bottom, to: .top, of: btnToggleDetectFace)
 
             btnToggleFlash.autoSetDimension(.height, toSize: buttonHeight)
-            btnToggleFlash.autoMatch(.width, to: .width, of: view, withMultiplier: 1/3)
+            btnToggleFlash.autoMatch(.width, to: .width, of: view, withMultiplier: 1/btnBasicCount)
             btnToggleFlash.autoPinEdge(.leading, to: .trailing, of: btnToggleCamera)
             btnToggleFlash.autoPinEdge(.bottom, to: .top, of: btnToggleDetectFace)
             
             btnTakePhoto.autoSetDimension(.height, toSize: buttonHeight)
-            btnTakePhoto.autoMatch(.width, to: .width, of: view, withMultiplier: 1/3)
+            btnTakePhoto.autoMatch(.width, to: .width, of: view, withMultiplier: 1/btnBasicCount)
             btnTakePhoto.autoPinEdge(.bottom, to: .top, of: btnToggleDetectFace)
             btnTakePhoto.autoPinEdge(.leading, to: .trailing, of: btnToggleFlash)
+            
+            btnTakeVideo.autoSetDimension(.height, toSize: buttonHeight)
+            btnTakeVideo.autoMatch(.width, to: .width, of: view, withMultiplier: 1/btnBasicCount)
+            btnTakeVideo.autoPinEdge(.bottom, to: .top, of: btnToggleDetectFace)
+            btnTakeVideo.autoPinEdge(.leading, to: .trailing, of: btnTakePhoto)
             
             didSetupConstraints = true
         }
@@ -159,6 +176,7 @@ class ViewController: CameraPreviewController {
         btnToggleCamera.showBorder()
         btnToggleFlash.showBorder()
         btnTakePhoto.showBorder()
+        btnTakeVideo.showBorder()
         btnToggleDetectFace.showBorder()
         btnAddFilter.showBorder()
         btnClearFilters.showBorder()
@@ -166,6 +184,20 @@ class ViewController: CameraPreviewController {
 }
 
 extension ViewController {
+    
+    public func pressedTakeVideo(sender: UIButton) {
+        sender.showLoading()
+        if isRecordingVideo {
+            finishRecordingVideo(completion: {
+                sender.setTitle("Take Video", for: .normal)
+            })
+        } else {
+            startRecordingVideo(completion: {
+                sender.hideLoading()
+                sender.setTitle("Finish Recording", for: .normal)
+            })
+        }
+    }
     
     public func pressedTakePhoto(sender: UIButton) {
         takePhoto({ image in
@@ -221,12 +253,41 @@ extension ViewController {
 
 // MARK: - Implementation for CameraPreviewControllerDelegate
 extension ViewController: CameraPreviewControllerDelegate {
+    
+    func cameraPreview(_ controller: CameraPreviewController, didSaveVideoAt url: URL) {
+        if UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(url.path) {
+            UISaveVideoAtPathToSavedPhotosAlbum(url.path, self, #selector(finishedWriteVideoToSavedPhotosAlbum), nil)
+        } else {
+            logw("Given path: \(url.absoluteString) is not compatible with \"Saved Photos Album\"")
+        }
+    }
+    
+    func cameraPreview(_ controller: CameraPreviewController, didFailSaveVideoWithError error: Error) {
+        btnTakeVideo.hideLoading()
+    }
+    
     func cameraPreview(_ controller: CameraPreviewController, willOutput sampleBuffer: CMSampleBuffer, with sequence: UInt64) {
         
     }
+    
     func cameraPreview(_ controller: CameraPreviewController, willFocusInto locationInView: CGPoint, tappedLocationInImage locationInImage: CGPoint) {
         logi("Focusing location in view: \(locationInView)")
         logi("Focusing location(ratio) in image: \(locationInImage)")
+    }
+}
+
+// MARK: Handles Video Capture
+extension ViewController {
+    func finishedWriteVideoToSavedPhotosAlbum(_ videoPath: String, didFinishSavingWithError error: NSError?, contextInfo: UnsafeRawPointer) {
+        if let error = error {
+            logc("Error: \(error.localizedDescription)")
+        } else {
+            logi("Successfully saved a video file in Photo Library: \(videoPath)")
+        }
+        DispatchQueue.main.async {
+            self.btnTakeVideo.setTitle("Take Video", for: .normal)
+            self.btnTakeVideo.hideLoading()
+        }
     }
 }
 
