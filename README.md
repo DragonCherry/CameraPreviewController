@@ -37,7 +37,7 @@ Please don't hesitate to contribute on this project. Any advice and suggestions 
 
 - To take photo,
 
-```
+```Swift
 takePhoto({ image in
     let photoVC = PhotoViewController()
     photoVC.image = image
@@ -45,9 +45,29 @@ takePhoto({ image in
 })
 ```
 
+- To take video,
+
+```Swift
+// to start
+startRecordingVideo()
+
+// to finish
+finishRecordingVideo()
+
+// to handle success
+extension ViewController: CameraPreviewControllerDelegate {
+    func cameraPreview(_ controller: CameraPreviewController, didSaveVideoAt url: URL) {
+        // which is file url in temporary directory
+    }
+    func cameraPreview(_ controller: CameraPreviewController, didFailSaveVideoWithError error: Error) {
+    }
+    ...
+}
+```
+
 - To change camera,
 
-```
+```Swift
 flipCamera()
 switch cameraPosition {
     // do something
@@ -56,7 +76,7 @@ switch cameraPosition {
 
 - To control torch,
 
-```
+```Swift
 torchMode = .on
 torchMode = .off
 torchMode = .auto
@@ -64,14 +84,14 @@ torchMode = .auto
 
 - To add, remove filters
 
-```
+```Swift
 add(filter: filter)
 removeFilters()
 ```
 
 - To detect face,
 
-```
+```Swift
 // set true somewhere
 isFaceDetectorEnabled = true
 
